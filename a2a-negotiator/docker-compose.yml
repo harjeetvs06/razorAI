@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # --- FastAPI Negotiator Service ---
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rzp_a2a_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/a2a_negotiator
+      - REDIS_URL=redis://redis:6379/0
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-rzp_test_mock_key}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-mock_secret}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET:-whsec_mock_secret}
+      - GLOBAL_MIN_MARGIN_PCT=0.15
+      - GLOBAL_MAX_DISCOUNT_PCT=0.25
+      - MAX_NEGOTIATION_ROUNDS=5
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - a2a_network
+
+  # --- PostgreSQL Database ---
+  db:
+    image: postgres:15-alpine
+    container_name: rzp_a2a_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: a2a_negotiator
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d a2a_negotiator"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - a2a_network
+
+  # --- Redis Cache / Session Lock ---
+  redis:
+    image: redis:7-alpine
+    container_name: rzp_a2a_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - a2a_network
+
+networks:
+  a2a_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
