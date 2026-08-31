@@ -1,0 +1,25 @@
+# ── Core ──────────────────────────────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+
+# Pydantic — use 2.6.x which has Python 3.13 wheels on PyPI
+pydantic>=2.9.0
+pydantic-core>=2.23.0
+pydantic-settings==2.2.1
+
+# ── Database (optional — only needed if you enable Postgres persistence) ──────
+# asyncpg has no 3.13 wheel yet — install separately ONLY if on Python ≤ 3.12
+# asyncpg==0.29.0
+# sqlalchemy[asyncio]==2.0.30
+# alembic==1.13.1
+
+# ── Razorpay ──────────────────────────────────────────────────────────────────
+razorpay==1.4.1
+
+# ── HTTP / Utils ──────────────────────────────────────────────────────────────
+httpx==0.27.0
+python-dotenv==1.0.1
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.2.0
+pytest-asyncio==0.23.6
