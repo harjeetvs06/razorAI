@@ -150,7 +150,7 @@ def run_negotiation(req: BuyerRequest, razorpay_link: str = "", order_id: str = 
 
     else:
         gates.append(f"✗ REJECTED — below floor ₹{fin_r.effective_floor}")
-        return _reject(neg_id, req, item, audit, gates, fin_r.reason, razorpay_link)
+        return _reject(neg_id, req, item, audit, gates, fin_r.reason, razorpay_link,fin_r.effective_floor)
 
     total    = round(final_price * req.quantity, 2)
     disc_pct = round((1 - final_price / item["base_price"]) * 100, 1)
@@ -167,6 +167,7 @@ def run_negotiation(req: BuyerRequest, razorpay_link: str = "", order_id: str = 
         base_price=item["base_price"],
         stock_available=item["stock"],
         shipping_days=item["shipping_sla_days"],
+        effective_floor=fin_r.effective_floor,
         payment_link=razorpay_link or f"https://rzp.io/pay/{neg_id.lower()}",
         razorpay_order_id=order_id or None,
         audit_trail=audit,
@@ -176,7 +177,7 @@ def run_negotiation(req: BuyerRequest, razorpay_link: str = "", order_id: str = 
     )
 
 
-def _reject(neg_id, req, item, audit, gates, reason, link="") -> NegotiationResult:
+def _reject(neg_id, req, item, audit, gates, reason, link="",effective_floor:float=0.0) -> NegotiationResult:
     import time
     return NegotiationResult(
         negotiation_id=neg_id,
@@ -188,6 +189,7 @@ def _reject(neg_id, req, item, audit, gates, reason, link="") -> NegotiationResu
         base_price=item["base_price"],
         stock_available=item["stock"],
         shipping_days=item["shipping_sla_days"],
+        effective_floor=effective_floor,
         payment_link="",
         razorpay_order_id=None,
         audit_trail=audit,

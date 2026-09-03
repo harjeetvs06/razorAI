@@ -29,12 +29,19 @@ export const Route = createFileRoute("/negotiate")({
   component: NegotiatePage,
 });
 
-type Phase = "idle" | "sending" | "result";
+type Phase = "idle" | "sending" | "result" | "error";
 
 function NegotiatePage() {
-  const { sku } = Route.useSearch();
-  const { products } = usePolicy();
 
+
+  const { sku } = Route.useSearch();
+  const { products ,loading,error} = usePolicy();
+
+  if (loading) return <main className="mx-auto max-w-6xl px-4 py-14 text-center text-sm text-muted-foreground">Loading catalog…</main>;
+  if (error || products.length === 0) return <main className="mx-auto max-w-6xl px-4 py-14 text-center text-sm text-destructive">Couldn't load catalog. Is the backend running on :8001?</main>;
+
+
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const [selected, setSelected] = useState(sku ?? products[0].sku);
   const product = products.find((p) => p.sku === selected) ?? products[0];
 
@@ -56,6 +63,7 @@ function NegotiatePage() {
     [product.sku, qty, budget, deadline],
   );
 
+
   const requestJson = JSON.stringify(
     {
       protocol: "a2a/negotiate.v1",
@@ -74,15 +82,23 @@ function NegotiatePage() {
     2,
   );
 
-  function send() {
+  async function send() {
     setPhase("sending");
     setResult(null);
-    const computed = negotiate(product, intent);
-    window.setTimeout(() => {
+    setErrorMessage("");
+    try {
+      const computed = await negotiate(product, intent);
       setResult(computed);
       setPhase("result");
-      window.setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
-    }, 1100);
+      window.setTimeout(
+        () => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+        60,
+      );
+    } catch (err) {
+      console.error("Negotiation failed:", err);
+      setErrorMessage(err instanceof Error ? err.message : "Negotiation failed. Is the backend running?");
+      setPhase("error");
+    }
   }
 
   return (
@@ -194,25 +210,38 @@ function NegotiatePage() {
         </section>
       </div>
 
-      <div ref={resultRef} className="scroll-mt-24">
-        {phase === "sending" ? <SendingState /> : null}
-        {phase === "result" && result ? <ResultView result={result} /> : null}
-        {phase === "idle" ? (
-          <div className="surface-card mt-6 p-10 text-center">
-            <Handshake className="mx-auto size-6 text-muted-foreground" />
-            <p className="mt-4 text-sm font-medium">No session yet</p>
-            <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-              Set the terms your agent is authorised to accept, then send. You'll see the decision
-              form gate by gate rather than pop out of a spinner.
-            </p>
-          </div>
-        ) : null}
+     <div ref={resultRef} className="scroll-mt-24">
+    {phase === "sending" ? <SendingState /> : null}
+    {phase === "result" && result ? <ResultView result={result} /> : null}
+    {phase === "error" ? (
+      <div className="surface-card mt-6 p-10 text-center border border-red-500/30">
+        <p className="text-sm font-medium text-red-500">Negotiation failed</p>
+        <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+          {errorMessage}
+        </p>
+        <button
+          onClick={() => setPhase("idle")}
+          className="mt-4 text-sm underline underline-offset-4"
+        >
+          Try again
+        </button>
       </div>
+    ) : null}
+    {phase === "idle" ? (
+      <div className="surface-card mt-6 p-10 text-center">
+        <Handshake className="mx-auto size-6 text-muted-foreground" />
+        <p className="mt-4 text-sm font-medium">No session yet</p>
+        <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+          Set the terms your agent is authorised to accept, then send. You'll see the decision
+          form gate by gate rather than pop out of a spinner.
+        </p>
+      </div>
+    ) : null}
+  </div>
     </main>
   );
 }
-
-function Field({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
+  function Field({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
   return (
     <div className="mt-6">
       <div className="flex items-baseline justify-between">

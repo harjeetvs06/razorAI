@@ -52,6 +52,7 @@ class NegotiationResult(BaseModel):
     base_price: float
     stock_available: int
     shipping_days: int
+    effective_floor: float = 0.0 
     payment_link: str
     razorpay_order_id: Optional[str] = None
     audit_trail: List[AuditStep]

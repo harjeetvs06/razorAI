@@ -23,7 +23,24 @@ export const Route = createFileRoute("/catalog")({
 });
 
 function Catalog() {
-  const { products } = usePolicy();
+  const { products, loading, error } = usePolicy();
+
+  if (loading) {
+    return (
+      <main className="mx-auto max-w-6xl px-4 py-14 sm:px-6 text-center">
+        <p className="text-sm text-muted-foreground">Loading catalog…</p>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="mx-auto max-w-6xl px-4 py-14 sm:px-6 text-center">
+        <p className="text-sm text-destructive">Couldn't load catalog: {error}</p>
+        <p className="mt-2 text-xs text-muted-foreground">Is the backend running on http://localhost:8001?</p>
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-14 sm:px-6">

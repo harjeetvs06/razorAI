@@ -14,80 +14,36 @@ export type Product = {
   marginFloor: number;
 };
 
-export const CATALOG: Product[] = [
-  {
-    sku: "RZP-KB-01",
-    name: "Mechanical Keyboard 75%",
-    category: "Peripherals",
-    basePrice: 8990,
-    stock: 142,
-    stockCapacity: 200,
-    slaDays: 2,
-    costRatio: 0.62,
-    discountCap: 18,
-    marginFloor: 22,
-  },
-  {
-    sku: "RZP-HD-02",
-    name: "Studio Headphones ANC",
-    category: "Audio",
-    basePrice: 15499,
-    stock: 38,
-    stockCapacity: 150,
-    slaDays: 3,
-    costRatio: 0.7,
-    discountCap: 12,
-    marginFloor: 20,
-  },
-  {
-    sku: "RZP-MN-03",
-    name: '27" 4K Reference Monitor',
-    category: "Displays",
-    basePrice: 42000,
-    stock: 12,
-    stockCapacity: 60,
-    slaDays: 5,
-    costRatio: 0.75,
-    discountCap: 8,
-    marginFloor: 16,
-  },
-  {
-    sku: "RZP-CH-04",
-    name: "Ergonomic Task Chair",
-    category: "Furniture",
-    basePrice: 22750,
-    stock: 87,
-    stockCapacity: 120,
-    slaDays: 6,
-    costRatio: 0.58,
-    discountCap: 22,
-    marginFloor: 25,
-  },
-  {
-    sku: "RZP-DK-05",
-    name: "Thunderbolt Dock 12-in-1",
-    category: "Peripherals",
-    basePrice: 11250,
-    stock: 5,
-    stockCapacity: 80,
-    slaDays: 4,
-    costRatio: 0.66,
-    discountCap: 15,
-    marginFloor: 20,
-  },
-  {
-    sku: "RZP-CM-06",
-    name: "4K Conference Camera",
-    category: "Video",
-    basePrice: 31900,
-    stock: 61,
-    stockCapacity: 100,
-    slaDays: 3,
-    costRatio: 0.68,
-    discountCap: 14,
-    marginFloor: 18,
-  },
-];
+export async function fetchCatalog(): Promise<Product[]> {
+  const res = await fetch("http://localhost:8001/api/v1/negotiate/catalog");
+  if (!res.ok) throw new Error(`Catalog fetch failed: ${res.status}`);
+  const raw: {
+    sku: string;
+    name: string;
+    base_price: number;
+    stock: number;
+    category: string;
+    shipping_sla_days: number;
+    image_key: string;
+  }[] = await res.json();
+
+  // Map backend field names -> frontend Product shape.
+  // Backend doesn't expose costRatio/discountCap/marginFloor (merchant-private policy),
+  // so we use safe placeholder values for display only — the REAL numbers are
+  // enforced server-side and returned per-negotiation as `effective_floor`.
+  return raw.map((item) => ({
+    sku: item.sku,
+    name: item.name,
+    category: item.category,
+    basePrice: item.base_price,
+    stock: item.stock,
+    stockCapacity: item.stock,
+    slaDays: item.shipping_sla_days,
+    costRatio: 0,
+    discountCap: 0,
+    marginFloor: 0,
+  }));
+}
 
 export type BuyerIntent = {
   sku: string;
@@ -138,140 +94,63 @@ export function volumeBonus(qty: number) {
   return 0;
 }
 
-export function negotiate(product: Product, intent: BuyerIntent): NegotiationResult {
-  const base = product.basePrice;
-  const unitCost = base * product.costRatio;
-  const bonus = volumeBonus(intent.qty);
-  const effectiveCap = Math.min(product.discountCap + bonus, 35);
+export async function negotiate(product: Product, intent: BuyerIntent): Promise<NegotiationResult> {
+  const t0 = performance.now();
 
-  // Floor from margin policy and floor from discount cap — the stricter wins.
-  const marginFloorPrice = unitCost / (1 - product.marginFloor / 100);
-  const capFloorPrice = base * (1 - effectiveCap / 100);
-  const merchantFloor = round(Math.max(marginFloorPrice, capFloorPrice));
-
-  const offer = round(intent.budgetPerUnit);
-  const gates: Gate[] = [];
-  const audit: string[] = [];
-  const t0 = 18 + ((intent.qty * 7) % 46);
-
-  audit.push(`intent.received agent=${intent.agentId} sku=${product.sku} qty=${intent.qty}`);
-  audit.push(`catalog.lookup base=₹${base.toLocaleString("en-IN")} stock=${product.stock} sla=${product.slaDays}d`);
-  audit.push(`policy.load margin_floor=${product.marginFloor}% discount_cap=${product.discountCap}%`);
-  audit.push(`volume.rebate qty=${intent.qty} -> +${bonus}% headroom (effective cap ${effectiveCap}%)`);
-  audit.push(`floor.compute margin=₹${Math.round(marginFloorPrice).toLocaleString("en-IN")} cap=₹${Math.round(capFloorPrice).toLocaleString("en-IN")} -> ₹${Math.round(merchantFloor).toLocaleString("en-IN")}`);
-
-  // Gate 1 — inventory
-  const stockOk = intent.qty <= product.stock;
-  gates.push({
-    id: "inventory",
-    label: "Inventory availability",
-    status: stockOk ? "pass" : "fail",
-    detail: stockOk
-      ? `${intent.qty} of ${product.stock} units reserved`
-      : `Only ${product.stock} units on hand, ${intent.qty} requested`,
+  // Call the multi-round A2A endpoint
+  const res = await fetch("http://localhost:8001/api/v1/negotiate/auto", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sku: product.sku,
+      quantity: intent.qty,
+      budget_total: intent.budgetPerUnit * intent.qty,
+      delivery_deadline_days: intent.deadlineDays,
+      buyer_agent_id: intent.agentId,
+    }),
   });
 
-  // Gate 2 — fulfilment SLA
-  const slaOk = intent.deadlineDays >= product.slaDays;
-  const slaTight = slaOk && intent.deadlineDays - product.slaDays <= 1;
-  gates.push({
-    id: "sla",
-    label: "Fulfilment SLA",
-    status: slaOk ? (slaTight ? "warn" : "pass") : "fail",
-    detail: slaOk
-      ? `Ships in ${product.slaDays}d, deadline ${intent.deadlineDays}d`
-      : `Needs ${product.slaDays}d minimum, deadline is ${intent.deadlineDays}d`,
-  });
-
-  // Gate 3 — discount cap
-  const requestedDiscount = round(((base - offer) / base) * 100);
-  const capOk = requestedDiscount <= effectiveCap;
-  gates.push({
-    id: "cap",
-    label: "Discount cap",
-    status: capOk ? "pass" : "fail",
-    detail: `Asked ${Math.max(requestedDiscount, 0).toFixed(1)}% · policy allows ${effectiveCap.toFixed(1)}%`,
-  });
-
-  // Gate 4 — margin floor
-  const marginAtOffer = round(((offer - unitCost) / offer) * 100);
-  const marginOk = marginAtOffer >= product.marginFloor;
-  gates.push({
-    id: "margin",
-    label: "Gross margin floor",
-    status: marginOk ? "pass" : "fail",
-    detail: `Offer holds ${marginAtOffer.toFixed(1)}% margin · floor ${product.marginFloor}%`,
-  });
-
-  // Gate 5 — offer sanity
-  const sane = offer > 0 && offer <= base * 1.5 && intent.qty > 0;
-  gates.push({
-    id: "sanity",
-    label: "Offer sanity & anti-abuse",
-    status: sane ? "pass" : "fail",
-    detail: sane ? "Offer within expected bounds for this SKU" : "Offer outside acceptable bounds",
-  });
-
-  gates.forEach((g) => audit.push(`gate.${g.id} -> ${g.status.toUpperCase()} :: ${g.detail}`));
-
-  const hardBlock = gates.find((g) => g.status === "fail" && (g.id === "inventory" || g.id === "sla" || g.id === "sanity"));
-
-  let verdict: Verdict;
-  let finalUnitPrice = offer;
-  let headline: string;
-  let reason: string;
-
-  if (hardBlock) {
-    verdict = "REJECTED";
-    finalUnitPrice = 0;
-    headline = "Rejected on a hard constraint";
-    reason = `${hardBlock.label} could not be satisfied — ${hardBlock.detail}. Price was never the blocker here.`;
-    audit.push(`decision.reject cause=${hardBlock.id}`);
-  } else if (offer >= merchantFloor) {
-    verdict = "ACCEPTED";
-    // Meet the buyer where they are, never charge above base.
-    finalUnitPrice = round(Math.min(offer, base));
-    headline = "Accepted at the buyer's price";
-    reason = `The offer clears the merchant floor of ₹${Math.round(merchantFloor).toLocaleString("en-IN")}/unit with room to spare.`;
-    audit.push(`decision.accept unit=₹${Math.round(finalUnitPrice).toLocaleString("en-IN")}`);
-  } else {
-    verdict = "COUNTERED";
-    finalUnitPrice = merchantFloor;
-    headline = "Countered at the merchant floor";
-    reason = `₹${Math.round(offer).toLocaleString("en-IN")}/unit sits below the floor. ₹${Math.round(merchantFloor).toLocaleString("en-IN")}/unit is the lowest price that keeps every guardrail intact.`;
-    audit.push(`decision.counter unit=₹${Math.round(merchantFloor).toLocaleString("en-IN")}`);
+  if (!res.ok) {
+    throw new Error(`Negotiation failed: ${res.status} ${await res.text()}`);
   }
 
-  const total = round(finalUnitPrice * intent.qty);
-  const paymentLink =
-    verdict === "ACCEPTED"
-      ? `https://rzp.io/i/${product.sku.toLowerCase().replace(/-/g, "")}${Math.abs(
-          (intent.qty * 7919 + Math.round(finalUnitPrice)) % 99991,
-        )}`
-      : undefined;
+  const data = await res.json();
+  const latencyMs = Math.round(performance.now() - t0);
 
-  if (paymentLink) audit.push(`payment.link.created ${paymentLink}`);
-  audit.push(`payload.signed hmac=sha256 latency=${t0}ms`);
+  // Map the multi-round response back to NegotiationResult shape for rendering
+  const finalAgreement = data.final_agreement || data.transcript[data.transcript.length - 2]; // last merchant response
+  
+  const verdict: Verdict = data.outcome === "DEAL" ? "ACCEPTED" : "REJECTED";
+  
+  const transcript = data.transcript.map((t: any, i: number) => 
+    t.actor === "merchant" 
+      ? `Round ${t.round}: Merchant ${t.response.status} at ₹${t.response.unit_price}/unit`
+      : `Round ${t.round}: Buyer ${t.move} — ${t.reason}`
+  );
 
   return {
     verdict,
-    headline,
-    reason,
-    gates,
-    audit,
-    basePrice: base,
-    buyerOffer: offer,
-    merchantFloor,
-    finalUnitPrice,
-    totalPayable: total,
-    discountPct: round(((base - finalUnitPrice) / base) * 100),
-    minimumWorkable: merchantFloor,
-    latencyMs: t0,
-    paymentLink,
+    headline: data.outcome === "DEAL" ? "Deal Reached!" : "No Agreement",
+    reason: data.reason || finalAgreement?.explanation || "",
+    gates: (finalAgreement?.gates_checked || []).map((g: string, i: number) => ({
+      id: `gate-${i}`,
+      label: g.replace(/^[✓✗]\s*/, "").split(":")[0] ?? "",
+      status: g.startsWith("✓") ? "pass" : g.startsWith("✗") ? "fail" : "warn",
+      detail: g.replace(/^[✓✗]\s*/, ""),
+    })),
+    audit: transcript,
+    basePrice: finalAgreement?.base_price || product.basePrice,
+    buyerOffer: intent.budgetPerUnit,
+    merchantFloor: finalAgreement?.effective_floor || 0,
+    finalUnitPrice: finalAgreement?.unit_price || 0,
+    totalPayable: finalAgreement?.total_price || 0,
+    discountPct: finalAgreement?.discount_pct || 0,
+    minimumWorkable: 0,
+    latencyMs,
+    paymentLink: finalAgreement?.payment_link || "",
     intent,
     product,
   };
 }
-
 export const inr = (n: number) =>
   "₹" + Math.round(n).toLocaleString("en-IN", { maximumFractionDigits: 0 });
