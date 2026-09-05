@@ -5,7 +5,7 @@ from app.engine.negotiator import run_negotiation, get_catalog_items, CATALOG
 from app.integrations.razorpay_client import create_payment_link, create_order
 from app.audit.logger import emit_negotiation_log
 from typing import List
-
+from pydantic import BaseModel
 router = APIRouter()
 
 
@@ -145,3 +145,34 @@ async def auto_negotiate(req: BuyerRequest):
         "reason": f"Negotiation did not converge after {policy.max_rounds} rounds.",
         "total_rounds": round_num - 1,
     }
+class NaturalLanguageRequest(BaseModel):
+    message: str
+    buyer_agent_id: str = "nl-buyer-agent"
+
+@router.post("/from-text")
+async def negotiate_from_text(payload: NaturalLanguageRequest):
+    """Accept natural language, parse via AI, run full A2A negotiation."""
+    from app.engine.intent_parser import parse_buyer_intent
+    from app.engine.negotiator import CATALOG
+
+    catalog_list = [{"sku": k, **v} for k, v in CATALOG.items()]
+
+    try:
+        parsed = parse_buyer_intent(payload.message, catalog_list)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Could not understand request: {str(e)}")
+
+    if not parsed.get("sku") or parsed["sku"] not in CATALOG:
+        raise HTTPException(status_code=422, detail=f"Could not match a product to your request.")
+
+    req = BuyerRequest(
+        sku=parsed["sku"],
+        quantity=parsed["quantity"],
+        budget_total=parsed["budget_total"],
+        delivery_deadline_days=parsed.get("delivery_deadline_days", 7),
+        buyer_agent_id=payload.buyer_agent_id,
+    )
+
+    result = await auto_negotiate(req)
+    result["ai_parsed_intent"] = parsed  # show judges the AI's interpretation
+    return result

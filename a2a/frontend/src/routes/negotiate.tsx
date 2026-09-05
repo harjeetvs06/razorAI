@@ -9,7 +9,7 @@ import { inr, negotiate, volumeBonus, type NegotiationResult } from "@/lib/razor
 
 export const Route = createFileRoute("/negotiate")({
   validateSearch: (s: Record<string, unknown>) => ({
-    sku: typeof s.sku === "string" ? s.sku : undefined,
+    sku: typeof s["sku"] === "string" ? s["sku"] : undefined,
   }),
   head: () => ({
     meta: [
@@ -42,11 +42,11 @@ function NegotiatePage() {
 
 
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [selected, setSelected] = useState(sku ?? products[0].sku);
-  const product = products.find((p) => p.sku === selected) ?? products[0];
+  const [selected, setSelected] = useState(sku ?? products[0]!.sku);
+  const product = products.find((p) => p.sku === selected) ?? products[0]!;
 
   const [qty, setQty] = useState(40);
-  const [budget, setBudget] = useState(() => Math.round(products[0].basePrice * 0.85));
+  const [budget, setBudget] = useState(() => Math.round(products[0]!.basePrice * 0.85));
   const [deadline, setDeadline] = useState(7);
   const [phase, setPhase] = useState<Phase>("idle");
   const [result, setResult] = useState<NegotiationResult | null>(null);
@@ -357,7 +357,7 @@ function ResultView({ result }: { result: NegotiationResult }) {
           base={result.basePrice}
           offer={result.buyerOffer}
           floor={result.merchantFloor}
-          settled={result.verdict === "REJECTED" ? undefined : result.finalUnitPrice}
+          {...(result.verdict !== "REJECTED" ? { settled: result.finalUnitPrice } : {})}
         />
         <GateList gates={result.gates} />
       </div>

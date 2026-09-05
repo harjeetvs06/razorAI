@@ -138,16 +138,16 @@ def run_negotiation(req: BuyerRequest, razorpay_link: str = "", order_id: str = 
             "✓ ACCEPTED — payment link generated")
 
     elif fin_r.passed:
-        # buyer's price is between floor and our standard offer → counter-accept at buyer's price
-        final_price = implied_unit
+        # buyer's price is between floor and our standard offer → propose genuine midpoint
+        midpoint = round(implied_unit + (offered_price - implied_unit) * 0.5, 2)
+        final_price = max(midpoint, fin_r.effective_floor)  # never counter below our own floor
         status      = NegotiationStatus.COUNTER
         explanation = (
-            f"Buyer price ₹{implied_unit}/unit < our offer ₹{offered_price}/unit "
-            f"but ≥ margin floor ₹{fin_r.effective_floor}. Counter-accepted at buyer's price."
+            f"Buyer offered ₹{implied_unit}/unit; our standard price is ₹{offered_price}/unit. "
+            f"Countering at ₹{final_price}/unit (meeting in the middle, above margin floor ₹{fin_r.effective_floor})."
         )
-        add("COUNTER_ACCEPT", final_price, explanation,
-            f"✓ COUNTER-ACCEPTED at ₹{final_price}")
-
+        add("COUNTER_PROPOSE", final_price, explanation,
+            f"✓ COUNTER-PROPOSED at ₹{final_price} (buyer offered ₹{implied_unit})")
     else:
         gates.append(f"✗ REJECTED — below floor ₹{fin_r.effective_floor}")
         return _reject(neg_id, req, item, audit, gates, fin_r.reason, razorpay_link,fin_r.effective_floor)

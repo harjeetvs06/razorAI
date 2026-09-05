@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AiNegotiateRouteImport } from './routes/ai-negotiate'
 import { Route as CatalogRouteImport } from './routes/catalog'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as NegotiateRouteImport } from './routes/negotiate'
@@ -17,6 +18,11 @@ import { Route as NegotiateRouteImport } from './routes/negotiate'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AiNegotiateRoute = AiNegotiateRouteImport.update({
+  id: '/ai-negotiate',
+  path: '/ai-negotiate',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CatalogRoute = CatalogRouteImport.update({
@@ -37,12 +43,14 @@ const NegotiateRoute = NegotiateRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ai-negotiate': typeof AiNegotiateRoute
   '/catalog': typeof CatalogRoute
   '/dashboard': typeof DashboardRoute
   '/negotiate': typeof NegotiateRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/ai-negotiate': typeof AiNegotiateRoute
   '/catalog': typeof CatalogRoute
   '/dashboard': typeof DashboardRoute
   '/negotiate': typeof NegotiateRoute
@@ -50,20 +58,28 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ai-negotiate': typeof AiNegotiateRoute
   '/catalog': typeof CatalogRoute
   '/dashboard': typeof DashboardRoute
   '/negotiate': typeof NegotiateRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/catalog' | '/dashboard' | '/negotiate'
+  fullPaths: '/' | '/ai-negotiate' | '/catalog' | '/dashboard' | '/negotiate'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/catalog' | '/dashboard' | '/negotiate'
-  id: '__root__' | '/' | '/catalog' | '/dashboard' | '/negotiate'
+  to: '/' | '/ai-negotiate' | '/catalog' | '/dashboard' | '/negotiate'
+  id:
+    | '__root__'
+    | '/'
+    | '/ai-negotiate'
+    | '/catalog'
+    | '/dashboard'
+    | '/negotiate'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AiNegotiateRoute: typeof AiNegotiateRoute
   CatalogRoute: typeof CatalogRoute
   DashboardRoute: typeof DashboardRoute
   NegotiateRoute: typeof NegotiateRoute
@@ -76,6 +92,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ai-negotiate': {
+      id: '/ai-negotiate'
+      path: '/ai-negotiate'
+      fullPath: '/ai-negotiate'
+      preLoaderRoute: typeof AiNegotiateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/catalog': {
@@ -104,6 +127,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AiNegotiateRoute: AiNegotiateRoute,
   CatalogRoute: CatalogRoute,
   DashboardRoute: DashboardRoute,
   NegotiateRoute: NegotiateRoute,
