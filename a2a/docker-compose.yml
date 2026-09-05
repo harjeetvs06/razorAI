@@ -1,25 +1,15 @@
-version: "3.9"
 services:
-  api:
+  backend:
     build: .
     ports:
-      - "8000:8000"
+      - "8001:8001"
     env_file: .env
-    depends_on:
-      - db
     volumes:
       - .:/app
 
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_DB: razorai
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+  frontend:
+    build: ./frontend
     ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
-volumes:
-  pgdata:
+      - "8082:8082"
+    depends_on:
+      - backend

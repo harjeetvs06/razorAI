@@ -14,6 +14,7 @@ pydantic-settings==2.2.1
 # alembic==1.13.1
 
 # ── Razorpay ──────────────────────────────────────────────────────────────────
+setuptools<81
 razorpay==1.4.1
 
 # ── HTTP / Utils ──────────────────────────────────────────────────────────────
@@ -24,5 +25,4 @@ python-dotenv==1.0.1
 pytest==8.2.0
 pytest-asyncio==0.23.6
 
-#ai-integration
-groq
+openai==1.51.0
